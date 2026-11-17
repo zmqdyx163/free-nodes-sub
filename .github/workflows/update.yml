@@ -1,6 +1,14 @@
 name: update-subscription
 
 on:
+  # 代码有改动时跑一次，方便改完立刻验证。
+  # README / status.json 之类的纯文档提交不会触发。
+  push:
+    paths:
+      - 'scripts/**'
+      - 'lib/**'
+      - 'package.json'
+      - '.github/workflows/update.yml'
   schedule:
     # GitHub 的 schedule 在整点最挤，实测 '0 4 * * *' 被延后了 7h50m。
     # 改成整点后 37 分，并加一次兜底；靠 gate step 保证一天只真跑一次。
