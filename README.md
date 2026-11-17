@@ -1,127 +1,91 @@
 # free-nodes-sub
 
-每天自动抓取 [xinshoucun.net](https://xinshoucun.net/category/freenode) 和 [blog.kuaiyu.cc](https://blog.kuaiyu.cc/) 的免费节点，去重后用 **mihomo 内核做真实代理测速**，按国家保留延迟最低的 Top 10，输出订阅。
+每天自动抓取 [xinshoucun.net](https://xinshoucun.net/category/freenode) 和 [blog.kuaiyu.cc](https://blog.kuaiyu.cc/) 的免费节点，去重后用 **mihomo 内核做真实代理测速**（基准：`ippure.com`），再经香港/日本/新加坡三地可达性验证，每国保留 **Top5**。
 
-## 订阅地址
+> **订阅不在仓库里。** 产物只走 GitHub Actions 的 Artifact，仓库内只有代码和一个不含节点信息的 `status.json`。原因见下方「为什么不再公开订阅」。
 
-```
-Clash / Clash.Meta   https://zmqdyx163.github.io/free-nodes-sub/sub/clash.yaml
-v2rayN / 小火箭      https://zmqdyx163.github.io/free-nodes-sub/sub/base64.txt
-明文 URI             https://zmqdyx163.github.io/free-nodes-sub/sub/uri.txt
-统计                 https://zmqdyx163.github.io/free-nodes-sub/sub/stats.json
+---
 
-备用（raw，无 Pages 缓存）
-https://raw.githubusercontent.com/zmqdyx163/free-nodes-sub/main/sub/clash.yaml
-https://cdn.jsdelivr.net/gh/zmqdyx163/free-nodes-sub@main/sub/clash.yaml
-```
+## 获取订阅
 
-每日北京时间 12:00（UTC 04:00）由 GitHub Actions 自动更新。
+1. 打开 [Actions](https://github.com/zmqdyx163/free-nodes-sub/actions/workflows/update.yml)
+2. 点最新一次成功的运行
+3. 页面底部 **Artifacts** → 下载 `subscription-NNN`
+4. 解压得到 `clash.yaml` / `base64.txt` / `uri.txt`，直接导入客户端
 
-### 最近一次结果
+Artifact 保留 7 天，每天由定时任务刷新。**需要登录 GitHub 才能下载**，正是这一点挡住了扫描器。
 
-| 指标 | 数值 |
-|---|---|
-| 文章 / 订阅 | 849 篇 / 422 个 |
-| 原始节点 | 57,676 条 |
-| 去重后 | 8,635 条 |
-| mihomo 实测真活 | **477 条**（5.5%） |
-| 每国 Top10 筛出 | **197 条，覆盖 36 个国家** |
-| 平均代理延迟 | 517 ms（最快 US 14ms） |
+想随时手动跑一次：Actions → update-subscription → Run workflow。
 
-协议分布：ss 124 / vless 26 / hysteria2 23 / vmess 12 / trojan 12。
+---
 
-> 存活率 5.5% 看起来低，但这是**真实代理延迟**——必须走完 TLS/加密握手并成功拿到 HTTP 响应。之前的 TCP 握手方案测出 21.8%「存活」，实际能用的是 0，就是这个差别。
->
-> `hysteria2` 那 23 个是 TCP 探测根本测不出来的（QUIC/UDP 协议），只有 mihomo 能验。
+## 为什么不再公开订阅
+
+早期版本把 `sub/clash.yaml` 提交进仓库，配 GitHub Pages 和 raw 直链。三个漏洞：
+
+1. **public 仓库的文件内容会被 GitHub 代码搜索直接索引** —— 用 `repo:xxx proxies:` 就能搜到
+2. **raw 和 Pages 都是无鉴权静态地址** —— 拿到 URL 就能一直拉
+3. **改路径没用** —— 文件树可以完整枚举，随机命名只挡顺手扫的人
+
+更麻烦的是**历史**：就算从当前分支删掉，`git log` 里的每一个旧 commit 仍然能通过 `raw.githubusercontent.com/<repo>/<sha>/sub/clash.yaml` 取到完整订阅。
+
+所以这一版把仓库删了重建（全新历史），并且从此不再提交任何节点数据。
+
+> 如果之后要恢复「客户端自动更新」，需要一个带鉴权的分发层（Cloudflare Worker 校验 secret 后转发），单纯放在 GitHub 静态托管上是做不到的。
 
 ---
 
 ## 三道验证
 
 ```
-mihomo 协议测活  →  check-host 亚洲可达  →  每国 Top10
-（真走加密握手）    （港/日/新三地 TCP）    （按亚洲延迟排序）
+mihomo 协议测活        →  check-host 亚洲可达       →  每国 Top5
+（ippure 基准，真握手）    （港/日/新 TCP，只测候选）    （按亚洲延迟排序）
 ```
 
-**第一道 mihomo**：起真内核，`/proxies/{name}/delay` 发真实 HTTP 请求，必须走完加密握手拿到响应。这一步砍掉密码错、协议不匹配、端口挂占位页的假活。
+**第一道 mihomo**：起真内核，对每个节点调 `/proxies/{name}/delay`，目标是 `https://ippure.com/cdn-cgi/trace`。必须走完加密握手并拿到响应才算活。这一步砍掉密码错、协议不匹配、端口挂占位页的假活。
 
-**第二道 check-host**：GitHub Runner 在美国，"对美西通"不等于"对亚洲通"。用 [check-host.net](https://check-host.net) 的 `hk1` / `jp1` / `sg1` 三个节点再做一次 TCP 可达性检测。实测 197 个节点里 90% 能从香港到达，砍掉的那 10% 就是典型的"海外能连、回国不通"。
+> 为什么用 `/cdn-cgi/trace` 而不是首页：首页 26.7 KB，8000 个节点要白跑 200 MB+ 流量；trace 端点只有 202 字节，是 Cloudflare 官方的连通性测试路径。
 
-**排序**：Top10 不再按 mihomo 的美西延迟排，而是按**港/日/新三地的最低 TCP 延迟**——这才是国内用户实际感受到的。
+**第二道 check-host**：GitHub Runner 在美国，「对美西通」不等于「对亚洲通」。用 [check-host.net](https://check-host.net) 的 `hk1` / `jp1` / `sg1` 再做一次 TCP 可达性检测。**只测每国按 mihomo 延迟排出的前 5 个候选**，UDP 协议（hysteria/tuic）直接跳过——check-host 只能测 TCP，测它们纯属浪费请求。
 
-> check-host 没有中国大陆节点，香港 `hk1` 是最接近的替代。它只测 TCP 端口可达，不测代理协议本身（那一步由 mihomo 保证）。
+**排序**：Top5 不按 mihomo 的美西延迟排，而是按**香港跳延迟**（国内 → 香港约 30–50ms，香港 → 目标才是真实绕路）。
 
-### 为什么不用 `cfproxy-tester` 的优选 IP
-
-`D:\DSH\搭建代理\cfproxy-tester-1.1-universal\ip.txt` 里那批香港/广州/杭州 IP 是 **CF SNI 反代入口**——它们只能把流量转发到 Cloudflare 网络（`--resolve zmq.kdns.fr:443:IP` 这种用法）。
-
-而这批订阅节点里 **187/197 是裸 IP 直连的 VPS**（Melbikomas、GTHost、OVH、Oracle、DigitalOcean 等），ISP 是 Cloudflare 的是 **0 个**。优选 IP 转发不到这些服务器，所以对它们无能为力。
-
-只有当节点 server 本身就是 CF 上的域名（vless/vmess/trojan + ws + tls 走 CF CDN）时，才能用优选 IP 替换 server 提速。当前节点池里这类只有 10 个域名节点，且不一定是 CF。
-
----
-
-## 为什么用 mihomo 而不是 TCP 探测
-
-之前用 `connect()` 做 TCP 握手来判断存活，结论是错的：**TCP 能握手只说明端口开着**。密码错了、协议不匹配、端口上挂着 Nginx 占位页，握手一样成功。结果订阅发出去全军覆没。
-
-现在改成起一个真的 mihomo 内核，逐个节点走 `GET /proxies/{name}/delay` 发一次真实 HTTP 请求（目标 `gstatic.com/generate_204`），只有**真的通过代理拿到响应**的节点才算活。这一步也顺带解决了 `hysteria` / `hysteria2` / `tuic` 这些 UDP 协议——TCP 探测对它们必然失败，mihomo 能真测。
+> check-host 没有中国大陆节点，香港 `hk1` 是最接近的替代。它只测 TCP 端口可达，协议本身可用性由 mihomo 那一步保证。
 
 ---
 
 ## 流程
 
 ```
-harvest.mjs   抓 843 篇文章 → 415 个订阅 → 解析去重 → ipinfo 标注国家
+harvest.mjs     抓 850+ 篇文章 → 420+ 个订阅 → 解析去重 → ipinfo 标注国家
      ↓  data/nodes.json
-probe.mjs     生成临时 clash 配置 → 起 mihomo → 并发调 delay API → 真实延迟
+probe.mjs       生成临时 clash 配置 → 起 mihomo → 并发调 delay → 真实延迟
      ↓  data/live.json
-build.mjs     按国家排序取 Top10 → 重命名 🇺🇸US-01 → 生成 yaml/base64/uri
+geo-probe.mjs   每国取 Top5 候选 → check-host 港/日/新 TCP 可达
+     ↓  data/asia.json
+build.mjs       按亚洲延迟排序 → 每国 Top5 → 生成 yaml/base64/uri
      ↓
-sub/          提交回仓库，GitHub Pages 自动发布
+upload-artifact   →  Actions Artifacts（保留 7 天）
+commit status.json →  仓库里只留时间戳和统计
 ```
 
-无 Durable Object、无 KV、无 Cron Trigger——全部在 Actions runner 里跑完，结果 commit 进仓库。
+无 Durable Object、无 KV、无 Cron Trigger，全部在 Actions runner 里跑完。
 
 ---
 
-## 部署（自己的副本）
+## 耗时与额度
 
-1. **Fork 或新建仓库**，把本项目推上去（必须 **public**，否则 Actions 分钟数会烧光）。
-2. **开启 GitHub Pages**：Settings → Pages → Source 选 `Deploy from a branch`，Branch 选 `main`、目录 `/ (root)`，保存。
-3. **（可选）配置 ipinfo token**：Settings → Secrets and variables → Actions → New repository secret，名字 `IPINFO_TOKEN`。不配也能跑（代码里有默认值，但公开仓库建议换自己的）。
-4. **手动跑一次**：Actions → update-subscription → Run workflow。
-5. 等 Actions 跑完，`sub/` 目录会有产出，Pages 地址即可用。
+| 阶段 | 耗时 |
+|---|---|
+| 抓取（850 篇 + 420 订阅） | ~5 分钟 |
+| mihomo 测速（8600 个，9 批） | ~20 分钟 |
+| 亚洲验证（每国 Top5，约 180 个） | ~12 分钟 |
+| 构建 + 提交 | <1 分钟 |
+| **合计** | **~38 分钟** |
 
-### 定时
+定时任务每天两次（`37 4` / `37 9` UTC），靠 gate 保证一天只真跑一次。
 
-`.github/workflows/update.yml`：
-
-```yaml
-on:
-  schedule:
-    - cron: '0 4 * * *'   # UTC 04:00 = 北京时间 12:00
-  workflow_dispatch:
-```
-
-> GitHub 的 schedule 在高峰期可能延迟 10–30 分钟，不保证准点。要精确可以用外部 cron 打 `workflow_dispatch` API。
->
-> **仓库连续 60 天无提交，GitHub 会自动停用 schedule**。本工作流每天都会 commit `sub/`，正常不会触发；但如果某天所有节点都挂了导致 commit 失败，注意检查。
-
----
-
-## 参数
-
-workflow 里的 `env`：
-
-| 变量 | 默认 | 说明 |
-|---|---|---|
-| `TOP_PER_COUNTRY` | 10 | 每国保留节点数 |
-| `PROBE_TIMEOUT` | 5000 | 单节点测速超时 ms |
-| `PROBE_CONCURRENCY` | 16 | 测速并发 |
-| `IPINFO_TOKEN` | — | ipinfo.io token，免费 50k/月 |
-
-单次跑的耗时：抓取 3–5 分钟，测速 20–40 分钟（视节点数和存活率），总计 30–50 分钟。Actions 单 job 上限 6 小时，充裕。
+> 如果仓库改成 private，Actions 会从「免费无限」变成每月 2000 分钟额度。38 分钟 × 30 天 = 1140 分钟，有余量。
 
 ---
 
@@ -129,29 +93,52 @@ workflow 里的 `env`：
 
 ```
 scripts/harvest.mjs   抓取 + 解析 + 去重 + geo 标注
-scripts/probe.mjs     mihomo 真实测速
-scripts/build.mjs     TopN 筛选 + 订阅生成
+scripts/probe.mjs     mihomo 真实测速（基准 ippure.com）
+scripts/geo-probe.mjs check-host 港/日/新可达性（每国 Top5）
+scripts/build.mjs     排序 + 每国 Top5 + 生成订阅
 lib/parsers.mjs       8 种协议解析 + Clash/URI 双向转换
 lib/sources.mjs       两站抓取
 lib/geo.mjs           ipinfo 批量查询
-sub/                  产出（自动提交）
-data/                 中间产物（gitignore）
+sub/                  产物目录（gitignore，只进 Artifact）
+status.json           运行时写入，只有时间戳和统计，无节点信息
 ```
 
 支持的协议：`ss` `ssr` `vmess` `vless` `trojan` `hysteria` `hysteria2` `tuic`
 
 ---
 
+## 参数
+
+workflow 的 `env`：
+
+| 变量 | 默认 | 说明 |
+|---|---|---|
+| `TOP_PER_COUNTRY` | 5 | 每国保留节点数 |
+| `GEO_TOP_PER_COUNTRY` | 5 | 每国送去亚洲验证的候选数 |
+| `PROBE_TIMEOUT` | 5000 | 单节点测速超时 ms |
+| `PROBE_URL` | `https://ippure.com/cdn-cgi/trace` | 测速目标 |
+| `PROBE_CONCURRENCY` | 16 | 测速并发 |
+| `GEO_CONCURRENCY` | 2 | check-host 并发（高了会 429）|
+| `IPINFO_TOKEN` | — | ipinfo.io token，不配也能跑（代码内有默认值）|
+
+---
+
 ## 排错
 
-**所有节点都测不出来**
-Runner 到节点的网络本身受限，或者节点确实全死。先看 `sub/stats.json` 的 `alive`；如果是 0，检查 mihomo 是否启动成功（日志里会有 `mihomo ready`）。
+**一个节点都没测出来**
+先看 `status.json` 的 `alive`。若为 0，检查 Probe 日志里 `mihomo ready` 是否出现——配置校验失败会打印 mihomo 的原始报错。
 
-**mihomo 启动失败**
-`probe.mjs` 会先用 `mihomo -t -f config.yaml` 校验配置，从报错里提取坏节点名并剔除重试。如果重试 6 次还失败，日志会打印 mihomo 的原始输出。
+**mihomo 拒绝整份配置**
+`probe.mjs` 会分批（每批 1000）校验，批内二分定位坏节点。已知会让 mihomo 拒启的：`ss` 的 `2022-*` cipher key 格式不对（已在生成前剔除）。
 
-**Pages 访问 404**
-Pages 部署要比 push 晚 1–2 分钟。另外 `sub/` 目录必须真的被提交了（Actions 的 Commit step 有 `git diff --cached --quiet` 判断，没变化就不 commit）。
+**check-host 返回 429**
+把 `GEO_CONCURRENCY` 降到 1、`GEO_GAP` 提到 1500。这个 API 免费但有限流。
 
-**订阅内容不更新**
-jsDelivr 对 `@main` 有 12 小时缓存，按需换成 raw 或 Pages 地址。
+**Artifact 里没文件**
+`if-no-files-found: error` 会让这一步直接失败，去看 Build 那步的日志。
+
+**定时任务没按点跑**
+GitHub 的 schedule 在整点最挤，实测 `0 4 * * *` 被延后过 7 小时 50 分。已改成 `37 4` 并加 `37 9` 兜底。
+
+**测速目标换掉后全部超时**
+ippure.com 走 Cloudflare。如果你的节点普遍不能访问 CF 网络，`/cdn-cgi/trace` 会全部失败——这时把 `PROBE_URL` 换成别的轻量地址（比如 `http://www.gstatic.com/generate_204`）再跑。
