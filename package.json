@@ -1,0 +1,16 @@
+{
+  "name": "free-nodes-sub",
+  "version": "2.0.0",
+  "private": true,
+  "type": "module",
+  "description": "每日抓取免费节点 → 去重 → mihomo 真实代理测速 → 输出订阅",
+  "scripts": {
+    "harvest": "node scripts/harvest.mjs",
+    "probe": "node scripts/probe.mjs",
+    "build": "node scripts/build.mjs",
+    "all": "node scripts/harvest.mjs && node scripts/probe.mjs && node scripts/build.mjs"
+  },
+  "dependencies": {
+    "js-yaml": "^5.5.0"
+  }
+}

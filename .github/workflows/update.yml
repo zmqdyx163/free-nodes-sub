@@ -1,0 +1,145 @@
+name: update-subscription
+
+on:
+  schedule:
+    # GitHub 的 schedule 在整点最挤，实测 '0 4 * * *' 被延后了 7h50m。
+    # 改成整点后 37 分，并加一次兜底；靠 gate step 保证一天只真跑一次。
+    - cron: '37 4 * * *' # 04:37 UTC = 北京 12:37
+    - cron: '37 9 * * *' # 09:37 UTC = 北京 17:37（主任务没跑成时兜底）
+  workflow_dispatch:
+    inputs:
+      top:
+        description: '每国保留节点数'
+        required: false
+        default: '5'
+
+permissions:
+  contents: write
+
+concurrency:
+  group: update-subscription
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    env:
+      TOP_PER_COUNTRY: ${{ github.event.inputs.top || '5' }}
+      IPINFO_TOKEN: ${{ secrets.IPINFO_TOKEN }}
+      PROBE_TIMEOUT: '5000'
+      PROBE_CONCURRENCY: '16'
+    steps:
+      - uses: actions/checkout@v4
+
+      # status.json 只含时间戳和统计，不含任何节点信息，可以安全提交。
+      # 两个 cron + 手动触发共用同一条工作流，用它判断当天是否已经跑过。
+      - name: Gate — already updated today?
+        id: gate
+        run: |
+          set -euo pipefail
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "手动触发，强制执行"
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          LAST=$(jq -r '.updated // empty' status.json 2>/dev/null || echo "")
+          TODAY=$(date -u +%Y-%m-%d)
+          echo "last=$LAST  today=$TODAY"
+          if [ -n "$LAST" ] && [ "${LAST#$TODAY}" != "$LAST" ]; then
+            echo "今天已更新过（$LAST），本次跳过"
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - uses: actions/setup-node@v4
+        if: steps.gate.outputs.skip != 'true'
+        with:
+          node-version: '20'
+
+      - name: Install deps
+        if: steps.gate.outputs.skip != 'true'
+        run: npm install --no-audit --no-fund
+
+      - name: Download mihomo
+        if: steps.gate.outputs.skip != 'true'
+        run: |
+          set -euo pipefail
+          URL=$(curl -s "https://api.github.com/repos/MetaCubeX/mihomo/releases/latest" \
+                | jq -r '.assets[].browser_download_url' \
+                | grep -E 'mihomo-linux-amd64-v[0-9.]+\.gz$' | head -1)
+          echo "download: $URL"
+          curl -sL -o mihomo.gz "$URL"
+          gunzip -f mihomo.gz
+          chmod +x mihomo
+          ./mihomo -v
+
+      - name: Harvest
+        if: steps.gate.outputs.skip != 'true'
+        run: node scripts/harvest.mjs
+
+      - name: Probe (real proxy latency test)
+        if: steps.gate.outputs.skip != 'true'
+        run: node scripts/probe.mjs
+
+      - name: Asia reachability (check-host HK/JP/SG)
+        if: steps.gate.outputs.skip != 'true'
+        continue-on-error: true
+        run: node scripts/geo-probe.mjs
+        env:
+          GEO_CONCURRENCY: '2'
+          GEO_GAP: '900'
+          GEO_TOP_PER_COUNTRY: '5'
+
+      - name: Build subscription
+        if: steps.gate.outputs.skip != 'true'
+        run: node scripts/build.mjs
+
+      # 订阅本体只走 Artifact，不写进仓库。
+      # public 仓库里的文件内容会被 GitHub 代码搜索直接索引，等于把节点白送。
+      - name: Upload subscription (artifact only)
+        if: steps.gate.outputs.skip != 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: subscription-${{ github.run_number }}
+          path: sub/
+          retention-days: 7
+          if-no-files-found: error
+
+      - name: Commit status only
+        if: steps.gate.outputs.skip != 'true'
+        run: |
+          set -euo pipefail
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add status.json
+          if git diff --cached --quiet; then
+            echo "no change"
+          else
+            git commit -m "chore: update status $(date -u +%Y-%m-%dT%H:%MZ)"
+            git push
+          fi
+
+      - name: Summary
+        if: always()
+        run: |
+          {
+            echo "## 订阅更新结果"
+            echo
+            if [ "${{ steps.gate.outputs.skip }}" = "true" ]; then
+              echo "今天已更新过，本次跳过。"
+              echo
+            fi
+            if [ -f status.json ]; then
+              echo '```json'
+              jq . status.json
+              echo '```'
+            else
+              echo "未产出 status.json"
+            fi
+            if [ -d sub ]; then
+              echo
+              echo "订阅产物在本次运行的 Artifacts 里（subscription-${{ github.run_number }}）。"
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"

@@ -1,0 +1,17 @@
+node_modules/
+data/
+.mihomo/
+mihomo
+mihomo.exe
+mihomo.zip
+mihomo*.exe
+*.log
+.DS_Store
+
+# 本地调试临时文件
+ch-*.mjs
+n.json
+check.*
+
+# 订阅产物不进 Git（防公开仓库被扫），只通过 Actions Artifact 分发
+sub/
