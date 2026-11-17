@@ -66,11 +66,20 @@ jobs:
         if: steps.gate.outputs.skip != 'true'
         run: |
           set -euo pipefail
-          URL=$(curl -s "https://api.github.com/repos/MetaCubeX/mihomo/releases/latest" \
-                | jq -r '.assets[].browser_download_url' \
-                | grep -E 'mihomo-linux-amd64-v[0-9.]+\.gz$' | head -1)
+          # 用 302 重定向拿版本号，不消耗 GitHub API 额度。
+          # Actions 共享出口 IP，未认证的 api.github.com 常被限流到 60/小时，
+          # 之前这一步就是这么挂的（19 秒失败）。
+          VER=$(curl -sI "https://github.com/MetaCubeX/mihomo/releases/latest" \
+                | tr -d '\r' | awk 'tolower($1)=="location:"{print $2}' | sed 's|.*/tag/||')
+          if [ -z "${VER:-}" ]; then
+            echo "重定向取不到版本，回退到 API"
+            VER=$(curl -s -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
+                  "https://api.github.com/repos/MetaCubeX/mihomo/releases/latest" | jq -r .tag_name)
+          fi
+          echo "version: $VER"
+          URL="https://github.com/MetaCubeX/mihomo/releases/download/${VER}/mihomo-linux-amd64-${VER}.gz"
           echo "download: $URL"
-          curl -sL -o mihomo.gz "$URL"
+          curl -fsSL -o mihomo.gz "$URL"
           gunzip -f mihomo.gz
           chmod +x mihomo
           ./mihomo -v
