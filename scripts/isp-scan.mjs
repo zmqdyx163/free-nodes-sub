@@ -83,7 +83,7 @@ for (let i = 0; i < ips.length; i += BATCH) {
   let rows = null;
   for (let attempt = 0; attempt < 3; attempt++) {
     try {
-      const r = await fetch('http://ip-api.com/batch?fields=status,query,isp,as', {
+      const r = await fetch('http://ip-api.com/batch?fields=status,query,countryCode,country,isp,as', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(batch),
@@ -107,8 +107,13 @@ for (let i = 0; i < ips.length; i += BATCH) {
       if (!q) continue;
       result[q] =
         row.status === 'success'
-          ? { cls: classify(row.isp, row.as), isp: row.isp || '', as: row.as || '' }
-          : { cls: 'unknown', isp: '', as: '' };
+          ? {
+              cls: classify(row.isp, row.as),
+              cc: (row.countryCode || '').toUpperCase(),
+              isp: row.isp || '',
+              as: row.as || '',
+            }
+          : { cls: 'unknown', cc: '', isp: '', as: '' };
     }
   }
   done += batch.length;
@@ -122,10 +127,18 @@ for (let i = 0; i < ips.length; i += BATCH) {
 let ispCount = 0;
 let hostingCount = 0;
 let unknownCount = 0;
+let ccFixed = 0;
 for (const n of nodes) {
   const r = result[n.server];
   n._res = r ? r.cls : 'unknown';
   if (r?.isp) n._ispDetail = r.isp;
+  // 国家标注也在这里修正：ipinfo 免费额度很容易耗尽（429），
+  // harvest 那一步拿不到国家时全会被标成 ZZ，"每国 Top5"就退化成只有 5 个。
+  // ip-api 的批量接口免费不限量，顺路把真实国家码回填。
+  if (r?.cc && /^[A-Z]{2}$/.test(r.cc) && r.cc !== n._cc) {
+    n._cc = r.cc;
+    ccFixed++;
+  }
   if (n._res === 'isp') ispCount++;
   else if (n._res === 'hosting') hostingCount++;
   else unknownCount++;
@@ -140,6 +153,7 @@ fs.writeFileSync(
       at: new Date().toISOString(),
       scanned: Object.keys(result).length,
       nodes: { isp: ispCount, hosting: hostingCount, unknown: unknownCount },
+      ccFixed,
       durationSec: Math.round((Date.now() - t0) / 1000),
     },
     null,
@@ -148,4 +162,5 @@ fs.writeFileSync(
 );
 
 log(`分类完成：家宽 ${ispCount} / 机房 ${hostingCount} / 未知 ${unknownCount}`);
+log(`国家标注修正 ${ccFixed} 个（ipinfo 拿不到国家时靠这个兜底）`);
 log(`已写回 data/nodes.json 与 data/isp.json`);

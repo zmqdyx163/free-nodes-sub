@@ -188,6 +188,9 @@ fs.writeFileSync(
       byType: stats.byType,
       avgLatency: stats.avgLatency,
       latencySource: stats.latencySource,
+      homeCount: stats.homeCount,
+      homeBestLatency: stats.homeBestLatency,
+      homeMaxLatency: stats.homeMaxLatency,
     },
     null,
     2
