@@ -93,6 +93,16 @@ sub.example.com {
 }
 ```
 
+不想装 Caddy 的话，仓库里带了个零依赖的令牌服务：
+
+```bash
+SUB_TOKEN=$(openssl rand -hex 16) PORT=8080 node scripts/serve.mjs
+# → http://<IP>:8080/<SUB_TOKEN>/clash.yaml
+```
+
+只认带令牌的路径（其余一律 404），文件白名单固定四个，做了防目录穿越，发 `Cache-Control: no-store`。
+适合「内网 + 隧道」或「已经有反向代理」的场景。**直接暴露到公网时仍然建议前面挂一层 HTTPS**，否则令牌是明文传输。
+
 ---
 
 ## 为什么不再公开订阅

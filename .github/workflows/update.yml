@@ -1,11 +1,14 @@
 name: update-subscription
 
 on:
-  # 代码有改动时跑一次，方便改完立刻验证。
-  # README / status.json 之类的纯文档提交不会触发。
+  # 只有「会改变产出」的代码改动才触发，省额度。
+  # serve.mjs / README / deploy 脚本都不影响订阅内容，不触发。
   push:
     paths:
-      - 'scripts/**'
+      - 'scripts/harvest.mjs'
+      - 'scripts/probe.mjs'
+      - 'scripts/geo-probe.mjs'
+      - 'scripts/build.mjs'
       - 'lib/**'
       - 'package.json'
       - '.github/workflows/update.yml'
