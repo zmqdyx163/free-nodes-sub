@@ -19,6 +19,82 @@ Artifact 保留 7 天，每天由定时任务刷新。**需要登录 GitHub 才�
 
 ---
 
+## 自建：VPS / 云电脑
+
+不想依赖 GitHub Actions（或者想用自己机器的网络视角测速），可以把整套流水线搬到自己机器上跑。
+
+**云电脑和 VPS 的区别很关键**：云电脑（无影、云桌面这类）绝大多数**没有公网 IP**，机器能跑但外部拉不到订阅。所以"在哪跑"和"怎么分发"是两件事。
+
+### Windows 云电脑 / 本机（PowerShell）
+
+```powershell
+# 管理员 PowerShell
+cd D:\
+Invoke-WebRequest -Uri https://raw.githubusercontent.com/zmqdyx163/free-nodes-sub/main/tools/deploy-win.ps1 -OutFile deploy-win.ps1
+.\deploy-win.ps1                        # 装到 C:\free-nodes-sub，装完跑一次
+.\deploy-win.ps1 -Dir D:\nodes          # 换目录
+.\deploy-win.ps1 -InstallTask           # 顺便注册每天 12:00 的计划任务
+.\deploy-win.ps1 -Update                # 只更新代码和内核
+```
+
+脚本会：检查 Node（没有就用 winget 装）→ 拉代码（没 git 就下 zip）→ 下 `mihomo-windows-amd64` → `npm install` → 跑完整流水线 → 可选注册计划任务。
+
+手动跑单步：
+
+```powershell
+cd C:\free-nodes-sub
+node scripts/harvest.mjs
+node scripts/probe.mjs            # 自动找 .\mihomo.exe
+node scripts/geo-probe.mjs
+node scripts/build.mjs
+dir sub\
+```
+
+### Linux 云主机 / VPS
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/zmqdyx163/free-nodes-sub/main/tools/deploy-vps.sh -o deploy-vps.sh
+sudo bash deploy-vps.sh
+```
+
+会自动识别 `x86_64 / aarch64 / armv7` 并下对应内核，装完打印 crontab 行。
+
+### 测速视角
+
+`probe.mjs` 是在**本机**发起的真实代理握手，所以机器在哪，测出来的就是哪条线路的成绩：
+
+| 机器位置 | 结果含义 |
+|---|---|
+| 美国 VPS | 和 GitHub Actions 接近 |
+| 香港 / 日本 / 新加坡 | 比 Actions 更贴近亚洲用户的实际体验，**推荐** |
+| 中国大陆云主机 | 真实国内视角，但通常连不上大部分海外节点，会筛出很少 |
+
+### 分发（云电脑最容易卡在这里）
+
+```
+A. 有公网 IP   →  Caddy + Basic Auth，客户端填 https://user:pass@域名/clash.yaml
+B. 没公网 IP   →  cloudflared / frp 打隧道出去，再用隧道域名配 Basic Auth
+C. 只想自己用  →  产物在 <安装目录>/sub/，远程桌面复制出来导入
+D. 想跨设备    →  推到私有仓库 / 对象存储（R2、OSS、S3），客户端从那边拉
+```
+
+**不要**用 `python -m http.server` 或 IIS 把 `sub/` 直接裸奔到公网——那就是前面说的无鉴权静态地址，等于白送。
+
+Caddy 最小配置（自动 HTTPS + 密码）：
+
+```caddyfile
+sub.example.com {
+    basic_auth {
+        me <用 caddy hash-password 生成的 bcrypt>
+    }
+    root * /opt/free-nodes-sub/sub
+    file_server
+    header Cache-Control "no-store"
+}
+```
+
+---
+
 ## 为什么不再公开订阅
 
 早期版本把 `sub/clash.yaml` 提交进仓库，配 GitHub Pages 和 raw 直链。三个漏洞：

@@ -19,7 +19,10 @@ const ROOT = process.cwd();
 const DATA = path.join(ROOT, 'data');
 const WORK = path.join(ROOT, '.mihomo');
 const CONFIG = path.join(WORK, 'config.yaml');
-const MIHOMO = process.env.MIHOMO_BIN || path.join(ROOT, 'mihomo');
+// Windows 上内核文件名带 .exe，Linux/macOS 没有
+const MIHOMO =
+  process.env.MIHOMO_BIN ||
+  path.join(ROOT, process.platform === 'win32' ? 'mihomo.exe' : 'mihomo');
 
 const API = 'http://127.0.0.1:19090';
 // 以 ippure.com 的 Cloudflare trace 端点为测速基准（202 字节，
