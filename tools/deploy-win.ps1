@@ -106,8 +106,9 @@ try {
 
   if (-not $Update) {
     # ---------- 跑流水线 ----------
-    Log "开始抓取 + 测速，约 25 分钟（可 Ctrl-C，之后用计划任务）"
+    Log "开始抓取 + 家宽判定 + 测速，约 25 分钟（可 Ctrl-C，之后用计划任务）"
     & node scripts/harvest.mjs;                if ($LASTEXITCODE -ne 0) { Die "harvest 失败" }
+    & node scripts/isp-scan.mjs;               if ($LASTEXITCODE -ne 0) { Warn "家宽扫描失败，跳过家宽组" }
     & node scripts/probe.mjs;                  if ($LASTEXITCODE -ne 0) { Die "probe 失败" }
     & node scripts/geo-probe.mjs;              if ($LASTEXITCODE -ne 0) { Warn "亚洲验证失败，按 mihomo 延迟排序" }
     & node scripts/build.mjs;                  if ($LASTEXITCODE -ne 0) { Die "build 失败" }
@@ -120,7 +121,7 @@ try {
   # ---------- 计划任务 ----------
   if ($InstallTask) {
     Log "注册计划任务（每天 $TaskTime）..."
-    $cmd = "cd /d `"$Dir`" && node scripts\harvest.mjs && node scripts\probe.mjs && (node scripts\geo-probe.mjs || exit /b 0) && node scripts\build.mjs >> `"$Dir\run.log`" 2>&1"
+    $cmd = "cd /d `"$Dir`" && node scripts\harvest.mjs && (node scripts\isp-scan.mjs || exit /b 0) && node scripts\probe.mjs && (node scripts\geo-probe.mjs || exit /b 0) && node scripts/build.mjs >> `"$Dir\run.log`" 2>&1"
     $action = New-ScheduledTaskAction -Execute 'cmd.exe' -Argument "/c $cmd"
     $trigger = New-ScheduledTaskTrigger -Daily -At $TaskTime
     $settings = New-ScheduledTaskSettingsSet -StartWhenAvailable -DontStopOnIdleEnd -ExecutionTimeLimit (New-TimeSpan -Hours 2)

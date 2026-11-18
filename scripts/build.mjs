@@ -90,6 +90,36 @@ for (const [cc, list] of [...groups.entries()].sort((a, b) => a[0].localeCompare
     });
   }
 }
+
+/* ---------- 家宽策略组：ISP 住宅 IP + 延迟达标 ---------- */
+const HOME_MAX_MS = +(process.env.HOME_MAX_LATENCY || 500);
+const HOME_MAX_N = +(process.env.HOME_MAX_NODES || 40);
+
+const homePool = live
+  .filter((n) => n._res === 'isp' && (n._latency ?? 1e9) <= HOME_MAX_MS)
+  .sort((a, b) => (a._latency || 9e9) - (b._latency || 9e9))
+  .slice(0, HOME_MAX_N);
+
+// 家宽节点如果不在国家 Top5 里，补进来（名字用 H 后缀，避免和 US-01 撞）
+const pickedByKey = new Map(selected.map((n) => [`${n.server}:${n.port}`, n]));
+const homeNames = [];
+const homeIdx = {};
+for (const n of homePool) {
+  const k = `${n.server}:${n.port}`;
+  let node = pickedByKey.get(k);
+  if (!node) {
+    homeIdx[n._cc] = (homeIdx[n._cc] || 0) + 1;
+    node = { ...n, name: `🏠${n._cc}-H${String(homeIdx[n._cc]).padStart(2, '0')}` };
+    selected.push(node);
+    pickedByKey.set(k, node);
+  }
+  homeNames.push(node.name);
+}
+log(
+  `家宽节点 ${homePool.length} 个（ISP 住宅 IP，延迟 ≤ ${HOME_MAX_MS}ms）` +
+    (homePool.length ? `，最低 ${homePool[0]._latency}ms` : '')
+);
+
 selected.sort((a, b) => a._cc.localeCompare(b._cc) || score(a) - score(b));
 log(`筛选后 ${selected.length} 个，覆盖 ${groups.size} 个国家`);
 
@@ -99,6 +129,7 @@ const clash = renderClashYaml(selected, {
   updated,
   sources: 'xinshoucun.net + blog.kuaiyu.cc',
   topPerCountry: TOP_N,
+  homeNames,
 });
 
 const byCountry = {};
@@ -123,6 +154,9 @@ const stats = {
   asiaVerified: asiaMeta ? asiaMeta.checked : 0,
   asiaReachable: asiaHit,
   finalAsiaReachable: finalAsia.length,
+  homeCount: homePool.length,
+  homeMaxLatency: HOME_MAX_MS,
+  homeBestLatency: homePool.length ? homePool[0]._latency : null,
   avgLatency: Math.round(finalAsia.reduce((s, n) => s + n._asia, 0) / Math.max(finalAsia.length, 1)),
   latencySource: finalAsia.length ? 'hk tcp hop (excl. cn->hk)' : 'mihomo overseas',
   byCountry,

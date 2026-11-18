@@ -6,6 +6,7 @@ on:
   push:
     paths:
       - 'scripts/harvest.mjs'
+      - 'scripts/isp-scan.mjs'
       - 'scripts/probe.mjs'
       - 'scripts/geo-probe.mjs'
       - 'scripts/build.mjs'
@@ -98,6 +99,14 @@ jobs:
       - name: Harvest
         if: steps.gate.outputs.skip != 'true'
         run: node scripts/harvest.mjs
+
+      # 先判定每个出口 IP 是不是 ISP 家宽（住宅），再进入测速。
+      # 用 ip-api 的 isp/as 名称做关键词分类，不用它那个误判严重的 hosting 字段。
+      - name: ISP scan (residential vs hosting)
+        if: steps.gate.outputs.skip != 'true'
+        run: node scripts/isp-scan.mjs
+        env:
+          ISP_GAP: '4200'
 
       - name: Probe (real proxy latency test)
         if: steps.gate.outputs.skip != 'true'
