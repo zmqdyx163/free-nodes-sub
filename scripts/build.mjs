@@ -95,8 +95,10 @@ for (const [cc, list] of [...groups.entries()].sort((a, b) => a[0].localeCompare
 const HOME_MAX_MS = +(process.env.HOME_MAX_LATENCY || 500);
 const HOME_MAX_N = +(process.env.HOME_MAX_NODES || 40);
 
-const homePool = live
-  .filter((n) => n._res === 'isp' && (n._latency ?? 1e9) <= HOME_MAX_MS)
+// 分两步统计，方便判断「没有住宅 IP」还是「住宅 IP 都超过阈值」
+const homeAll = live.filter((n) => n._res === 'isp');
+const homePool = homeAll
+  .filter((n) => (n._latency ?? 1e9) <= HOME_MAX_MS)
   .sort((a, b) => (a._latency || 9e9) - (b._latency || 9e9))
   .slice(0, HOME_MAX_N);
 
@@ -116,7 +118,7 @@ for (const n of homePool) {
   homeNames.push(node.name);
 }
 log(
-  `家宽节点 ${homePool.length} 个（ISP 住宅 IP，延迟 ≤ ${HOME_MAX_MS}ms）` +
+  `家宽：住宅 IP 共 ${homeAll.length} 个，其中延迟 ≤${HOME_MAX_MS}ms 的 ${homePool.length} 个` +
     (homePool.length ? `，最低 ${homePool[0]._latency}ms` : '')
 );
 
@@ -155,8 +157,16 @@ const stats = {
   asiaReachable: asiaHit,
   finalAsiaReachable: finalAsia.length,
   homeCount: homePool.length,
+  homeIspTotal: homeAll.length,
   homeMaxLatency: HOME_MAX_MS,
   homeBestLatency: homePool.length ? homePool[0]._latency : null,
+  ispScan: (() => {
+    try {
+      return JSON.parse(fs.readFileSync(path.join(DATA, 'isp-meta.json'), 'utf8')).nodes;
+    } catch {
+      return null;
+    }
+  })(),
   avgLatency: Math.round(finalAsia.reduce((s, n) => s + n._asia, 0) / Math.max(finalAsia.length, 1)),
   latencySource: finalAsia.length ? 'hk tcp hop (excl. cn->hk)' : 'mihomo overseas',
   byCountry,
@@ -189,8 +199,10 @@ fs.writeFileSync(
       avgLatency: stats.avgLatency,
       latencySource: stats.latencySource,
       homeCount: stats.homeCount,
+      homeIspTotal: stats.homeIspTotal,
       homeBestLatency: stats.homeBestLatency,
       homeMaxLatency: stats.homeMaxLatency,
+      ispScan: stats.ispScan,
     },
     null,
     2
