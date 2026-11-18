@@ -1,19 +1,16 @@
 {
-  "updated": "2026-11-17T00:00:00Z",
-  "live": 117,
-  "alive": 431,
-  "countries": 36,
+  "updated": "2026-11-18T19:28:08.917Z",
+  "live": 118,
+  "alive": 410,
+  "countries": 34,
   "topPerCountry": 5,
   "byType": {
-    "ss": 74,
-    "hysteria2": 15,
-    "vmess": 7,
-    "vless": 19,
+    "ss": 70,
+    "hysteria2": 17,
+    "vmess": 8,
+    "vless": 21,
     "trojan": 2
   },
-  "avgLatency": 266,
-  "latencySource": "hk tcp hop (excl. cn->hk)",
-  "homeCount": 0,
-  "homeBestLatency": null,
-  "homeMaxLatency": 500
+  "avgLatency": 350,
+  "latencySource": "hk tcp hop (excl. cn->hk)"
 }
