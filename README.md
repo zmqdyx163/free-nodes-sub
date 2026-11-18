@@ -140,31 +140,6 @@ mihomo 协议测活        →  check-host 亚洲可达       →  每国 Top5
 
 ---
 
-## 🏠 家宽策略组
-
-免费节点池里绝大多数是 VPS / 机房 IP（Amazon、DigitalOcean、OVH、Hetzner 这类），
-拿去做注册、看流媒体很容易被风控。所以流水线在测速前多了一步**ISP 归属判定**：
-
-```
-harvest → isp-scan → probe → build
-             ↑ 住宅 or 机房
-```
-
-`isp-scan.mjs` 用 ip-api 的批量接口（100 IP/次，免费不限量）拿每个出口 IP 的
-`isp` / `as` 名称，再用关键词表分成 `isp`（住宅）/ `hosting`（机房）/ `unknown`：
-
-- **不用它的 `hosting` 字段**——实测把 `114.114.114.114`（联通 DNS）都判成 `hosting=true`，误判严重
-- 机房词优先匹配（`amazon` `aws` `ovh` `digitalocean` `vultr` `cloud` `server` `cdn` …），
-  家宽词次之（`comcast` `verizon` `deutsche telekom` `china telecom` `fiber` `broadband` …）
-- 混合体按机房算，比如 `China Telecom Cloud`
-
-筛选条件：**`_res === 'isp'` 且 mihomo 实测延迟 ≤ 500ms**，最多 40 个，按延迟升序。
-
-产物里会多一个 `🏠 家宽节点` 分组（url-test，独立测速），`🚀 节点选择` 里也加了入口。
-家宽节点如果不在国家 Top5 里，会以 `🏠US-H01` 这种名字补进 proxies，不会漏掉。
-
-调参：`HOME_MAX_LATENCY`（默认 500，毫秒）、`HOME_MAX_NODES`（默认 40）。
-
 ---
 
 ## 流程

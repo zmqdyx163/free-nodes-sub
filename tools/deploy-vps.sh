@@ -98,9 +98,9 @@ if [ "$MODE" = "update" ]; then
 fi
 
 # ---------- 跑一次 ----------
-log "开始抓取 + 家宽判定 + 测速，约 25 分钟"
+log "开始抓取 + 国家标注 + 测速，约 25 分钟"
 node scripts/harvest.mjs
-node scripts/isp-scan.mjs || log "家宽扫描失败（跳过家宽组，其余不受影响）"
+node scripts/geo-scan.mjs || log "国家标注兜底失败（ipinfo 成功时不受影响）"
 node scripts/probe.mjs
 node scripts/geo-probe.mjs || log "亚洲验证失败（不影响主流程，节点按 mihomo 延迟排序）"
 node scripts/build.mjs
@@ -117,7 +117,7 @@ cat <<EOF
 1) 定时任务（服务器时区为 UTC 时，0 4 * * * = 北京 12:00）
 
    crontab -e
-   0 4 * * * cd $APP_DIR && { node scripts/harvest.mjs && (node scripts/isp-scan.mjs || true) && node scripts/probe.mjs && (node scripts/geo-probe.mjs || true) && node scripts/build.mjs; } >> /var/log/free-nodes.log 2>&1
+   0 4 * * * cd $APP_DIR && { node scripts/harvest.mjs && (node scripts/geo-scan.mjs || true) && node scripts/probe.mjs && (node scripts/geo-probe.mjs || true) && node scripts/build.mjs; } >> /var/log/free-nodes.log 2>&1
 
 2) 分发（三选一，详见 README「VPS 分发」）
 

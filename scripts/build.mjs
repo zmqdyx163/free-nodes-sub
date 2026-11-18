@@ -91,37 +91,6 @@ for (const [cc, list] of [...groups.entries()].sort((a, b) => a[0].localeCompare
   }
 }
 
-/* ---------- 家宽策略组：ISP 住宅 IP + 延迟达标 ---------- */
-const HOME_MAX_MS = +(process.env.HOME_MAX_LATENCY || 500);
-const HOME_MAX_N = +(process.env.HOME_MAX_NODES || 40);
-
-// 分两步统计，方便判断「没有住宅 IP」还是「住宅 IP 都超过阈值」
-const homeAll = live.filter((n) => n._res === 'isp');
-const homePool = homeAll
-  .filter((n) => (n._latency ?? 1e9) <= HOME_MAX_MS)
-  .sort((a, b) => (a._latency || 9e9) - (b._latency || 9e9))
-  .slice(0, HOME_MAX_N);
-
-// 家宽节点如果不在国家 Top5 里，补进来（名字用 H 后缀，避免和 US-01 撞）
-const pickedByKey = new Map(selected.map((n) => [`${n.server}:${n.port}`, n]));
-const homeNames = [];
-const homeIdx = {};
-for (const n of homePool) {
-  const k = `${n.server}:${n.port}`;
-  let node = pickedByKey.get(k);
-  if (!node) {
-    homeIdx[n._cc] = (homeIdx[n._cc] || 0) + 1;
-    node = { ...n, name: `🏠${n._cc}-H${String(homeIdx[n._cc]).padStart(2, '0')}` };
-    selected.push(node);
-    pickedByKey.set(k, node);
-  }
-  homeNames.push(node.name);
-}
-log(
-  `家宽：住宅 IP 共 ${homeAll.length} 个，其中延迟 ≤${HOME_MAX_MS}ms 的 ${homePool.length} 个` +
-    (homePool.length ? `，最低 ${homePool[0]._latency}ms` : '')
-);
-
 selected.sort((a, b) => a._cc.localeCompare(b._cc) || score(a) - score(b));
 log(`筛选后 ${selected.length} 个，覆盖 ${groups.size} 个国家`);
 
@@ -131,7 +100,6 @@ const clash = renderClashYaml(selected, {
   updated,
   sources: 'xinshoucun.net + blog.kuaiyu.cc',
   topPerCountry: TOP_N,
-  homeNames,
 });
 
 const byCountry = {};
@@ -156,17 +124,6 @@ const stats = {
   asiaVerified: asiaMeta ? asiaMeta.checked : 0,
   asiaReachable: asiaHit,
   finalAsiaReachable: finalAsia.length,
-  homeCount: homePool.length,
-  homeIspTotal: homeAll.length,
-  homeMaxLatency: HOME_MAX_MS,
-  homeBestLatency: homePool.length ? homePool[0]._latency : null,
-  ispScan: (() => {
-    try {
-      return JSON.parse(fs.readFileSync(path.join(DATA, 'isp-meta.json'), 'utf8')).nodes;
-    } catch {
-      return null;
-    }
-  })(),
   avgLatency: Math.round(finalAsia.reduce((s, n) => s + n._asia, 0) / Math.max(finalAsia.length, 1)),
   latencySource: finalAsia.length ? 'hk tcp hop (excl. cn->hk)' : 'mihomo overseas',
   byCountry,
@@ -198,11 +155,6 @@ fs.writeFileSync(
       byType: stats.byType,
       avgLatency: stats.avgLatency,
       latencySource: stats.latencySource,
-      homeCount: stats.homeCount,
-      homeIspTotal: stats.homeIspTotal,
-      homeBestLatency: stats.homeBestLatency,
-      homeMaxLatency: stats.homeMaxLatency,
-      ispScan: stats.ispScan,
     },
     null,
     2

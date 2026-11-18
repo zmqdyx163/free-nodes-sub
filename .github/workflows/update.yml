@@ -1,5 +1,4 @@
 name: update-subscription
-# 2026-11-19 手动触发验证家宽诊断字段
 
 on:
   # 只有「会改变产出」的代码改动才触发，省额度。
@@ -7,7 +6,7 @@ on:
   push:
     paths:
       - 'scripts/harvest.mjs'
-      - 'scripts/isp-scan.mjs'
+      - 'scripts/geo-scan.mjs'
       - 'scripts/probe.mjs'
       - 'scripts/geo-probe.mjs'
       - 'scripts/build.mjs'
@@ -101,13 +100,13 @@ jobs:
         if: steps.gate.outputs.skip != 'true'
         run: node scripts/harvest.mjs
 
-      # 先判定每个出口 IP 是不是 ISP 家宽（住宅），再进入测速。
-      # 用 ip-api 的 isp/as 名称做关键词分类，不用它那个误判严重的 hosting 字段。
-      - name: ISP scan (residential vs hosting)
+      # ip-api 批量补国家标注：ipinfo 免费额度耗尽（429）时所有节点会变 ZZ，
+      # 「每国 Top N」会退化成只取 N 个，订阅直接空掉。
+      - name: Geo scan (ip-api country fallback)
         if: steps.gate.outputs.skip != 'true'
-        run: node scripts/isp-scan.mjs
+        run: node scripts/geo-scan.mjs
         env:
-          ISP_GAP: '4200'
+          GEO_SCAN_GAP: '4200'
 
       - name: Probe (real proxy latency test)
         if: steps.gate.outputs.skip != 'true'
