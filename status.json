@@ -1,17 +1,17 @@
 {
-  "updated": "2026-11-20T13:57:43.158Z",
-  "live": 111,
-  "alive": 377,
-  "countries": 31,
+  "updated": "2026-11-21T13:23:53.182Z",
+  "live": 115,
+  "alive": 424,
+  "countries": 34,
   "topPerCountry": 5,
   "byType": {
-    "ss": 69,
-    "hysteria2": 13,
-    "vmess": 12,
-    "vless": 14,
-    "trojan": 2,
+    "ss": 70,
+    "hysteria2": 14,
+    "vmess": 6,
+    "vless": 20,
+    "trojan": 4,
     "ssr": 1
   },
-  "avgLatency": 305,
+  "avgLatency": 372,
   "latencySource": "hk tcp hop (excl. cn->hk)"
 }
